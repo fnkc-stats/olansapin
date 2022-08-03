@@ -7,6 +7,8 @@ uri     <- "http://redcap.fccho-moscow.ru/api/"
 token   <- ""
 data    <- REDCapR::redcap_read(redcap_uri=uri, token=token, raw_or_label = "label")$data
 
+
+# Подготовка таблиц ---------------------------------------------------------
 data_excluded <- data %>%
   filter(redcap_event_name == 'ХТ 1') %>%
   filter(if_any(inc_age:inc_sign, ~ . == 'Нет') | if_any(exc_apsych:exc_gcs, ~ . == 'Да'))
@@ -50,13 +52,14 @@ ct2_p <- data %>%
   select(record_id, redcap_event_name, ct_dt:ddcd_2a49_complete)
 
 
-# нежелательные явления
+# Наличие осложнений ---------------------------------------------------------
 calculate <- . %>%
   select(record_id, ct_ae_common:ct_ae_pns) %>%
   pivot_longer(-record_id) %>%
   group_by(record_id) %>%
   summarise(ct_ae = any(value != "Grade 0"))
 
+# наличие/остутствие осложнений
 ct_ae_1 <- bind_rows(ct1, ct1_p) %>% calculate() %>% rename(ct_ae_1 = ct_ae)
 ct_ae_2 <- bind_rows(ct2, ct2_p) %>% calculate() %>% rename(ct_ae_2 = ct_ae)
 
@@ -66,11 +69,13 @@ calculate <- . %>%
   group_by(record_id) %>%
   summarise(ct_ae = any(str_starts(value, "Grade 3")|str_starts(value, "Grade 4")))
 
+# наличие/остутствие осложнений 3-4 степени
 ct_ae_34_1 <- bind_rows(ct1, ct1_p) %>% calculate() %>% rename(ct_ae_34_1 = ct_ae)
 ct_ae_34_2 <- bind_rows(ct2, ct2_p) %>% calculate() %>% rename(ct_ae_34_2 = ct_ae)
 
 
-# не было рвоты и/или применения терапии
+# эпизоды рвоты и/или использования дополнительных противорвотных препаратов (терапия спасения) 
+# в период проведения химиотерапии и после его окончания (24 часа) ----------------------------
 calculate <- . %>%
   group_by(record_id) %>%
   summarise(ct_vomit = any(ct_vomit != "Нет"),
@@ -79,23 +84,24 @@ calculate <- . %>%
             good = !bad) %>%
             select(record_id,good)
 
-ct1_24 <- calculate(ct1) # терапия и первые 24 часа
+ct1_24 <- calculate(ct1) 
 ct2_24 <- calculate(ct2)
 
-ct1_p_120 <- calculate(ct1_p) # 120 часов после терапии
+
+# эпизоды рвоты и/или использования дополнительных противорвотных препаратов (терапия спасения) 
+# после окончания первого цикла химиотерапии (25-120 часов) ----------------------------------
+ct1_p_120 <- calculate(ct1_p)
 ct2_p_120 <- calculate(ct2_p)
 
-ct1_120 <- bind_rows(ct1, ct1_p) %>% calculate()  # терапия и 120 часов после терапии
+
+# эпизоды рвоты и/или использования дополнительных противорвотных препаратов (терапия спасения) 
+# в период проведения первого цикла химиотерапии и после его окончания (25-120 часов) --------
+ct1_120 <- bind_rows(ct1, ct1_p) %>% calculate() 
 ct2_120 <- bind_rows(ct2, ct2_p) %>% calculate()
 
 
-# Доля пациентов, у которых не было
-# тошноты (оценка по PeNAT) и/или
-# рвоты и/или
-# использования дополнительных противорвотных препаратов
-# в период проведения цикла химиотерапии и
-# в течение 120 часов после его окончания
-
+# эпизоды тошноты (оценка по шкале PeNAT) и/или рвоты и/или использования дополнительных противорвотных препаратов 
+# (терапия спасения) в период проведения первого цикла химиотерапии и 120 часов после его окончания 
 calculate <- . %>%
   group_by(record_id) %>%
   summarise(ct_nausea = any(ct_nausea != "1 - отсутствие тошноты"),
@@ -108,11 +114,13 @@ calculate <- . %>%
 ct1_t <- bind_rows(ct1, ct1_p) %>% calculate()
 ct2_t <- bind_rows(ct2, ct2_p) %>% calculate() 
 
-# Кол-во курсов
+
+# Количество n-дневных режимов химиотерапии ---------------------------------------------------------
 ct1_n <- count(ct1, record_id, name = "n_day_ct1")
 ct2_n <- count(ct2, record_id, name = "n_day_ct2")
 
-# промежуточная таблица со всеми данными
+
+# Формируем итоговую таблицу ---------------------------------------------------------
 final <- base_data %>%
   left_join(select(ct1_24,    record_id, ct1_24    = good), 'record_id') %>%
   left_join(select(ct2_24,    record_id, ct2_24    = good), 'record_id') %>%
