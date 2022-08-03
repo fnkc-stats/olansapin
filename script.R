@@ -23,7 +23,7 @@ data <- data %>%
 
 data_recommend <- data %>%
   filter(redcap_event_name == 'Оценка') %>%
-  select(record_id, recommend)
+  select(record_id, recommend, rating)
 
 base_data <- data %>%
   filter(redcap_event_name == "ХТ 1") %>%
@@ -80,9 +80,8 @@ calculate <- . %>%
   group_by(record_id) %>%
   summarise(ct_vomit = any(ct_vomit != "Нет"),
             ct_aemet_is = any(ct_aemet_is != "Нет"),
-            bad = ct_vomit | ct_aemet_is,
-            good = !bad) %>%
-            select(record_id,good)
+            bad = ct_vomit | ct_aemet_is)%>%
+  select(record_id,ct_vomit,ct_aemet_is,bad)
 
 ct1_24 <- calculate(ct1) 
 ct2_24 <- calculate(ct2)
@@ -100,16 +99,15 @@ ct1_120 <- bind_rows(ct1, ct1_p) %>% calculate()
 ct2_120 <- bind_rows(ct2, ct2_p) %>% calculate()
 
 
-# эпизоды тошноты (оценка по шкале PeNAT) и/или рвоты и/или использования дополнительных противорвотных препаратов 
+# эпизоды тошноты (оценка по шкале PeNAT) и/или рвоты и/или использования дополнительных противорвотных препаратов --------
 # (терапия спасения) в период проведения первого цикла химиотерапии и 120 часов после его окончания 
 calculate <- . %>%
   group_by(record_id) %>%
   summarise(ct_nausea = any(ct_nausea != "1 - отсутствие тошноты"),
             ct_vomit = any(ct_vomit != "Нет"),
             ct_aemet_is = any(ct_aemet_is != "Нет"),
-            bad = ct_nausea | ct_vomit | ct_aemet_is,
-            good = !bad) %>%
-  select(record_id,good)
+            bad = ct_nausea | ct_vomit | ct_aemet_is) %>%
+  select(record_id,ct_nausea,bad)
 
 ct1_t <- bind_rows(ct1, ct1_p) %>% calculate()
 ct2_t <- bind_rows(ct2, ct2_p) %>% calculate() 
@@ -122,14 +120,14 @@ ct2_n <- count(ct2, record_id, name = "n_day_ct2")
 
 # Формируем итоговую таблицу ---------------------------------------------------------
 final <- base_data %>%
-  left_join(select(ct1_24,    record_id, ct1_24    = good), 'record_id') %>%
-  left_join(select(ct2_24,    record_id, ct2_24    = good), 'record_id') %>%
-  left_join(select(ct1_p_120, record_id, ct1_p_120 = good), 'record_id') %>%
-  left_join(select(ct2_p_120, record_id, ct2_p_120 = good), 'record_id') %>%
-  left_join(select(ct1_120,   record_id, ct1_120   = good), 'record_id') %>%
-  left_join(select(ct2_120,   record_id, ct2_120   = good), 'record_id') %>%
-  left_join(select(ct1_t,     record_id, ct1_t     = good), 'record_id') %>%
-  left_join(select(ct2_t,     record_id, ct2_t     = good), 'record_id') %>%
+  left_join(select(ct1_24,    record_id, ct1_24    = bad, ct1_24_vomit = ct_vomit,  ct1_24_aemet = ct_aemet_is), 'record_id') %>%
+  left_join(select(ct2_24,    record_id, ct2_24    = bad, ct2_24_vomit = ct_vomit,  ct2_24_aemet = ct_aemet_is), 'record_id') %>%
+  left_join(select(ct1_p_120, record_id, ct1_p_120 = bad, ct1_p_120_vomit = ct_vomit,  ct1_p_120_aemet = ct_aemet_is), 'record_id') %>%
+  left_join(select(ct2_p_120, record_id, ct2_p_120 = bad, ct2_p_120_vomit = ct_vomit,  ct2_p_120_aemet = ct_aemet_is), 'record_id') %>%
+  left_join(select(ct1_120,   record_id, ct1_120   = bad, ct1_120_vomit = ct_vomit,  ct1_120_aemet = ct_aemet_is), 'record_id') %>%
+  left_join(select(ct2_120,   record_id, ct2_120   = bad, ct2_120_vomit = ct_vomit,  ct2_120_aemet = ct_aemet_is), 'record_id') %>%
+  left_join(select(ct1_t,     record_id, ct1_t     = bad, ct1_t_nausea = ct_nausea), 'record_id') %>%
+  left_join(select(ct2_t,     record_id, ct2_t     = bad, ct2_t_nausea = ct_nausea), 'record_id') %>%
   left_join(ct1_n, 'record_id') %>%
   left_join(ct2_n, 'record_id') %>%
   left_join(ct_ae_1, 'record_id') %>%
@@ -151,14 +149,29 @@ labels <- c(
   ct_plan_pt_is = "Высокие дозы цисплатина или высокие дозы карбоплатина",
   rand_arm = "Ветвь рандомизации",
   recommend = "Для последующего цикла пациенту рекомендован режим",
+  rating = "Предпочтительный режим противорвотной профилактики",
   ct1_24 = "Цикл 1, наличие рвоты/применения терапии во время ХТ",
+  ct1_24_vomit = "Цикл 1, наличие рвоты во время ХТ",
+  ct1_24_aemet = "Цикл 1, наличие применения терапии во время ХТ",
   ct2_24 = "Цикл 2, наличие рвоты/применения терапии во время ХТ",
+  ct2_24_vomit = "Цикл 2, наличие рвоты во время ХТ",
+  ct2_24_aemet = "Цикл 2, наличие применения терапии во время ХТ",
   ct1_p_120 = "Цикл 1, наличие рвоты/применения терапии следующие 120 часов после ХТ",
+  ct1_p_120_vomit = "Цикл 1, наличие рвоты следующие 120 часов после ХТ",
+  ct1_p_120_aemet = "Цикл 1, наличие применения терапии следующие 120 часов после ХТ",
   ct2_p_120 = "Цикл 2, наличие рвоты/применения терапии следующие 120 часов после ХТ",
+  ct2_p_120_vomit = "Цикл 2, наличие рвоты следующие 120 часов после ХТ",
+  ct2_p_120_aemet = "Цикл 2, наличие применения терапии следующие 120 часов после ХТ",
   ct1_120 = "Цикл 1, наличие рвоты/применения терапии во время ХТ и следующие 120 часов после ХТ",
+  ct1_120_vomit = "Цикл 1, наличие рвоты во время ХТ и следующие 120 часов после ХТ",
+  ct1_120_aemet = "Цикл 1, наличие применения терапии во время ХТ и следующие 120 часов после ХТ",
   ct2_120 = "Цикл 2, наличие рвоты/применения терапии во время ХТ следующие 120 часов после ХТ",
+  ct2_120_vomit = "Цикл 2, наличие рвоты во время ХТ следующие 120 часов после ХТ",
+  ct2_120_aemet = "Цикл 2, наличие применения терапии во время ХТ следующие 120 часов после ХТ",
   ct1_t = "Цикл 1, наличие тошноты/рвоты/применения терапии во время ХТ и следующие 120 часов после ХТ",
+  ct1_t_nausea = "Цикл 1, наличие тошноты во время ХТ и следующие 120 часов после ХТ",
   ct2_t = "Цикл 2, наличие тошноты/рвоты/применения терапии во время ХТ и следующие 120 часов после ХТ",
+  ct2_t_nausea = "Цикл 2, наличие тошноты во время ХТ и следующие 120 часов после ХТ",
   n_day_ct1 = "Количество дней 1 цикла ХТ",
   n_day_ct2 = "Количество дней 2 цикла ХТ",
   ct_ae_1 = "Наличие нежелательных явлений 1 цикла ХТ",
