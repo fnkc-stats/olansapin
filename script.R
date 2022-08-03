@@ -3,7 +3,7 @@ library(REDCapR)
 
 # Загрузка данных ---------------------------------------------------------
 uri     <- "http://redcap.fccho-moscow.ru/api/"
-token   <- "EE32A9BAA72F699B172AEF331B7473A2"
+token   <- ""
 data    <- REDCapR::redcap_read(redcap_uri=uri, token=token, raw_or_label = "label")$data
 
 data_del1 <- data %>%
