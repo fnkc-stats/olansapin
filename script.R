@@ -4,7 +4,7 @@ library(REDCapR)
 
 # Загрузка данных ---------------------------------------------------------
 uri     <- "http://redcap.fccho-moscow.ru/api/"
-token   <- ""
+token   <- "C3AFC5E5F7CB5CD7AE8F9D536386A9C9"
 data    <- REDCapR::redcap_read(redcap_uri=uri, token=token, raw_or_label = "label")$data
 
 
@@ -80,8 +80,9 @@ calculate <- . %>%
   group_by(record_id) %>%
   summarise(ct_vomit = any(ct_vomit != "Нет"),
             ct_aemet_is = any(ct_aemet_is != "Нет"),
+            ct_nausea = any(ct_nausea != "1 - отсутствие тошноты"),
             bad = ct_vomit | ct_aemet_is)%>%
-  select(record_id,ct_vomit,ct_aemet_is,bad)
+  select(record_id,ct_vomit,ct_aemet_is,ct_nausea,bad)
 
 ct1_24 <- calculate(ct1) 
 ct2_24 <- calculate(ct2)
@@ -107,7 +108,7 @@ calculate <- . %>%
             ct_vomit = any(ct_vomit != "Нет"),
             ct_aemet_is = any(ct_aemet_is != "Нет"),
             bad = ct_nausea | ct_vomit | ct_aemet_is) %>%
-  select(record_id,ct_nausea,bad)
+            select(record_id,ct_nausea,bad)
 
 ct1_t <- bind_rows(ct1, ct1_p) %>% calculate()
 ct2_t <- bind_rows(ct2, ct2_p) %>% calculate() 
@@ -118,16 +119,44 @@ ct1_n <- count(ct1, record_id, name = "n_day_ct1")
 ct2_n <- count(ct2, record_id, name = "n_day_ct2")
 
 
+# наличие тошноты/терапии спасения в период проведения химиотерапии (24 часа) --------
+calculate <- . %>%
+  group_by(record_id) %>%
+  summarise(ct_nausea = any(ct_nausea != "1 - отсутствие тошноты"),
+            ct_aemet_is = any(ct_aemet_is != "Нет"),
+            bad = ct_nausea | ct_aemet_is) %>%
+  select(record_id,bad)
+
+ct1_nau_aem_24 <- calculate(ct1) 
+ct2_nau_aem_24 <- calculate(ct2)
+
+
+# наличие тошноты/терапии спасения после окончания химиотерапии (25-120 часов) ----------------------------------
+ct1_nau_aem_p_120 <- calculate(ct1_p)
+ct2_nau_aem_p_120 <- calculate(ct2_p)
+
+
+# наличие тошноты/терапии спасения в период проведения химиотерапии и после его окончания (25-120 часов) --------
+ct1_nau_aem_120 <- bind_rows(ct1, ct1_p) %>% calculate() 
+ct2_nau_aem_120 <- bind_rows(ct2, ct2_p) %>% calculate()
+
+
 # Формируем итоговую таблицу ---------------------------------------------------------
 final <- base_data %>%
-  left_join(select(ct1_24,    record_id, ct1_24    = bad, ct1_24_vomit = ct_vomit,  ct1_24_aemet = ct_aemet_is), 'record_id') %>%
-  left_join(select(ct2_24,    record_id, ct2_24    = bad, ct2_24_vomit = ct_vomit,  ct2_24_aemet = ct_aemet_is), 'record_id') %>%
-  left_join(select(ct1_p_120, record_id, ct1_p_120 = bad, ct1_p_120_vomit = ct_vomit,  ct1_p_120_aemet = ct_aemet_is), 'record_id') %>%
-  left_join(select(ct2_p_120, record_id, ct2_p_120 = bad, ct2_p_120_vomit = ct_vomit,  ct2_p_120_aemet = ct_aemet_is), 'record_id') %>%
+  left_join(select(ct1_24,    record_id, ct1_24    = bad, ct1_24_vomit = ct_vomit,  ct1_24_aemet = ct_aemet_is, ct1_24_nausea = ct_nausea), 'record_id') %>%
+  left_join(select(ct2_24,    record_id, ct2_24    = bad, ct2_24_vomit = ct_vomit,  ct2_24_aemet = ct_aemet_is, ct2_24_nausea = ct_nausea), 'record_id') %>%
+  left_join(select(ct1_p_120, record_id, ct1_p_120 = bad, ct1_p_120_vomit = ct_vomit,  ct1_p_120_aemet = ct_aemet_is, ct1_p_120_nausea = ct_nausea), 'record_id') %>%
+  left_join(select(ct2_p_120, record_id, ct2_p_120 = bad, ct2_p_120_vomit = ct_vomit,  ct2_p_120_aemet = ct_aemet_is, ct2_p_120_nausea = ct_nausea), 'record_id') %>%
   left_join(select(ct1_120,   record_id, ct1_120   = bad, ct1_120_vomit = ct_vomit,  ct1_120_aemet = ct_aemet_is), 'record_id') %>%
   left_join(select(ct2_120,   record_id, ct2_120   = bad, ct2_120_vomit = ct_vomit,  ct2_120_aemet = ct_aemet_is), 'record_id') %>%
   left_join(select(ct1_t,     record_id, ct1_t     = bad, ct1_t_nausea = ct_nausea), 'record_id') %>%
   left_join(select(ct2_t,     record_id, ct2_t     = bad, ct2_t_nausea = ct_nausea), 'record_id') %>%
+  left_join(select(ct1_nau_aem_24,     record_id, ct1_nau_aem_24     = bad), 'record_id') %>%
+  left_join(select(ct2_nau_aem_24,     record_id, ct2_nau_aem_24     = bad), 'record_id') %>%
+  left_join(select(ct1_nau_aem_p_120,     record_id, ct1_nau_aem_p_120     = bad), 'record_id') %>%
+  left_join(select(ct2_nau_aem_p_120,     record_id, ct2_nau_aem_p_120     = bad), 'record_id') %>%
+  left_join(select(ct1_nau_aem_120,     record_id, ct1_nau_aem_120     = bad), 'record_id') %>%
+  left_join(select(ct2_nau_aem_120,     record_id, ct2_nau_aem_120     = bad), 'record_id') %>%
   left_join(ct1_n, 'record_id') %>%
   left_join(ct2_n, 'record_id') %>%
   left_join(ct_ae_1, 'record_id') %>%
@@ -177,8 +206,18 @@ labels <- c(
   ct_ae_1 = "Наличие нежелательных явлений 1 цикла ХТ",
   ct_ae_2 = "Наличие нежелательных явлений 2 цикла ХТ",
   ct_ae_34_1 = "Наличие нежелательных явлений 3-4 степени 1 цикла ХТ",
-  ct_ae_34_2 = "Наличие нежелательных явлений 3-4 степени 2 цикла ХТ"
-)
+  ct_ae_34_2 = "Наличие нежелательных явлений 3-4 степени 2 цикла ХТ",
+  ct1_nau_aem_24 = "Цикл 1, наличие тошноты/применения терапии во время ХТ",
+  ct2_nau_aem_24 = "Цикл 2, наличие тошноты/применения терапии во время ХТ",
+  ct1_nau_aem_p_120 = "Цикл 1, наличие тошноты/применения терапии следующие 120 часов после ХТ",
+  ct2_nau_aem_p_120 = "Цикл 2, наличие тошноты/применения терапии следующие 120 часов после ХТ",
+  ct1_nau_aem_120 = "Цикл 1, наличие тошноты/применения терапии во время ХТ и следующие 120 часов после ХТ",
+  ct2_nau_aem_120 = "Цикл 2, наличие тошноты/применения терапии во время ХТ и следующие 120 часов после ХТ",
+  ct1_24_nausea = "Цикл 1, наличие тошноты во время ХТ",
+  ct2_24_nausea = "Цикл 2, наличие тошноты во время ХТ",
+  ct1_p_120_nausea = "Цикл 1, наличие тошноты следующие 120 часов после ХТ",
+  ct2_p_120_nausea = "Цикл 2, наличие тошноты следующие 120 часов после ХТ"
+  )
 
 final <- final %>% rename_with(~ labels[.])
 
